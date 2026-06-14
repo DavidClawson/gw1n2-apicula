@@ -1,6 +1,9 @@
 # macOS junk
 .DS_Store
 
+# Private community/audience tracking (gw1n2-pulse skill) — never committed
+community.md
+
 # Vendored upstream Apicula clone — not committed here.
 # setup.sh clones it; or add it as a git submodule pinned to a commit.
 /tools/apicula/
