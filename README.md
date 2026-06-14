@@ -86,9 +86,39 @@ Until then, here's the honest breakdown by audience:
 
 **Two unlock moments to watch for:** (1) the chipdb merging upstream into Apicula
 flips this from "read along" to "anyone can unpack a GW1N-2 bitstream"; (2) a
-working unpack→modify→repack round-trip flips it to "experimenters can bring their
-own designs" — at which point this becomes an experimental sister repo for custom
-GW1N-2 work (see [`docs/09`](docs/09-openscope-context.md)).
+working unpack→modify→repack round-trip flips it to "experimenters can modify a
+GW1N-2 bitstream" — at which point this becomes an experimental sister repo for
+custom GW1N-2 work (see [`docs/09`](docs/09-openscope-context.md)).
+
+## Reference value for other GW1N devices
+
+The *bitstreams* this enables are device-locked — a Gowin bitstream carries its own
+IDCODE and a die-specific grid/frame layout, so a GW1N-2 image will not load on a
+GW1N-1, -4, or -9 (the IDCODE gate rejects it, and the fabric coordinates wouldn't
+line up even if forced). There's no "author once, run across the family."
+
+What *does* transfer is the knowledge and the tooling. The GW1N family (the
+"LittleBee" generation) shares an architecture — the same LUT4/DFF primitives, IO
+block structure, and routing-mux style — and Apicula is built around that, factoring
+shared per-die data rather than treating each device as a silo. (GW1N-2 here unpacks
+via GW1N-1P5C die data: Gowin's own files already treat these as related dies.) So
+the per-tile bit ↔ feature map and the fuzzing scripts (`tools/m*_*.py`) are a
+worked **reference implementation of the method**, reusable by anyone bringing
+another not-yet-supported Gowin device into Apicula — not just the GW1N-2.
+
+## Honest scope
+
+To be clear about what this is and isn't: the practical goal here is **not** a
+clean-sheet rework of the scope's FPGA design. The aim is the narrower, more
+tractable one — finding ways to *add features by modifying the existing stock
+bitstream*, ideally without fully reverse-engineering the original design. That work
+is inherently bound to a specific device and the scope's context.
+
+So for anyone arriving without the 2C53T hardware and that context, this repo is
+best read as a **research and reference resource** — a documented method, a chipdb,
+and a set of fuzzing tools — rather than a tool you can point at your own board and
+immediately use. That's by design, and the cross-family notes above are exactly the
+part that travels.
 
 ## Docs
 
