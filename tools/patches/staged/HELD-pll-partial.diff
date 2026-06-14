@@ -1,0 +1,36 @@
+--- apycula/chipdb.py	2026-06-13 09:42:38.308550699 -0600
++++ /tmp/chipdb_m4_keep.py	2026-06-13 09:42:38.267858013 -0600
+@@ -512,6 +512,10 @@
+     elif device in {'GW1NS-2'}:
+         if ttyp in {87}:
+             bel = bels.setdefault('RPLLA', Bel())
++    elif device in {'GW1N-2'}:
++        # GW1N-2 (GW1N-1P5C die): single rPLL, tile type 50 (M4 bring-up).
++        if ttyp in {50}:
++            bel = bels.setdefault('RPLLA', Bel())
+     elif device in {'GW1NS-4'}:
+         if ttyp in {88, 89}:
+             bel = bels.setdefault('PLLVR', Bel())
+@@ -5635,6 +5639,13 @@
+                         if col > dat.grid.center_x - 1:
+                             offx = -1
+                     for idx, nam in _pll_inputs:
++                        # GW1N-2 (GW1N-1P5C, partType 1): the base-region PllIn/PllOut
++                        # are all -1 -- the real PLL portmap lives in the appended
++                        # extended table at 0x7b4a8 (located, full decode is an M4
++                        # follow-up needing the EDA oracle). Skip unmapped ports so the
++                        # PLL bel + config fuses still build.
++                        if dat.portmap['PllIn'][idx] < 0:
++                            continue
+                         wire = wnames.wirenames[dat.portmap['PllIn'][idx]]
+                         off = dat.portmap['PllInDlt'][idx] * offx
+                         if device in {'GW1NS-2'}:
+@@ -5652,6 +5663,8 @@
+                             dev.nodes.setdefault(f'X{col}Y{row}/rPLL{nam}{wire}', ("PLL_I", {(row, col, f'rPLL{nam}{wire}')}))[1].add((row, col + off, wire))
+ 
+                     for idx, nam in _pll_outputs:
++                        if dat.portmap['PllOut'][idx] < 0:    # GW1N-2: see PllIn note above
++                            continue
+                         wire = wnames.wirenames[dat.portmap['PllOut'][idx]]
+                         off = dat.portmap['PllOutDlt'][idx] * offx
+                         if off == 0 or device in {'GW1NS-2'}:

@@ -1,0 +1,18 @@
+# macOS junk
+.DS_Store
+
+# Vendored upstream Apicula clone — not committed here.
+# setup.sh clones it; or add it as a git submodule pinned to a commit.
+/tools/apicula/
+
+# Proprietary vendor artifacts — NOT redistributed.
+# The reference bitstream is a byte-exact slice of FNIRSI's stock firmware.
+# Reproduce it locally from the recipe in reference/NOTES.md (sha256 there).
+reference/*.bin
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/

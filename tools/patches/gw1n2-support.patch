@@ -1,0 +1,179 @@
+diff --git a/Makefile b/Makefile
+index 9fdd366..deb46b9 100644
+--- a/Makefile
++++ b/Makefile
+@@ -7,6 +7,7 @@ endif
+ 
+ all: apycula/GW1N-1.msgpack.xz apycula/GW1N-9.msgpack.xz apycula/GW1N-4.msgpack.xz \
+ 	 apycula/GW1NS-4.msgpack.xz apycula/GW1N-9C.msgpack.xz apycula/GW1NZ-1.msgpack.xz \
++	 apycula/GW1N-2.msgpack.xz \
+ 	 apycula/GW2A-18.msgpack.xz apycula/GW2A-18C.msgpack.xz apycula/GW5A-25A.msgpack.xz \
+ 	 apycula/GW5AST-138C.msgpack.xz
+ 
+diff --git a/apycula/bslib.py b/apycula/bslib.py
+index dccd34b..372e946 100644
+--- a/apycula/bslib.py
++++ b/apycula/bslib.py
+@@ -109,6 +109,9 @@ def read_bitstream(fname):
+                     elif ba == b'\x06\x00\x00\x00\x01\x00h\x1b':      # GW1NZ-1
+                         padding = 0
+                         compress_padding = 0
++                    elif ba == b'\x06\x00\x00\x00\x01\x20h\x1b':      # GW1N-2 (IDCODE 0x0120681B) -- GW1N-2 support WIP
++                        padding = 0          # TODO: confirm empirically (copied from GW1NZ-1, closest relative)
++                        compress_padding = 0 # TODO: only matters for compressed streams; verify against a real GW1N-2 .fs
+                     elif ba == b'\x06\x00\x00\x00\x01\x00\x98\x1b':   # GW1NS-4
+                         padding = 0
+                         compress_padding = 8
+diff --git a/apycula/chipdb.py b/apycula/chipdb.py
+index 17aee0c..b92dc6d 100644
+--- a/apycula/chipdb.py
++++ b/apycula/chipdb.py
+@@ -907,6 +907,15 @@ _io_cfg = {
+     357: ['RPLL0_C_FB0'],
+     367: ['ADCINCLK'],
+     368: ['ADCOTEST'],
++    # GW1N-2 bring-up: special-function codes identified by cross-device vendor
++    # cross-reference (tools/m_iocfg_mine.py). Each carries a package label on
++    # GW1NZ-1/GW1NS-4 where the pin is bonded out; on GW1N-2's QFN48XF these pins
++    # are unbonded so the build previously fell through to UNKNOWN_CFG.
++    75: ['LPLL_T_IN'],     # GW1N-2 IOL5A  (labelled @ GW1NS-4:IOT13A)
++    136: ['MCLK', 'D4'],  # GW1N-2 IOR6B  (GW1NZ-1:IOR6D, GW1NS-4:IOT10A)
++    153: ['MO', 'D6'],    # GW1N-2 IOR5B  (GW1NZ-1:IOR6B, GW1NS-4:IOT11A)
++    154: ['MI', 'D7'],    # GW1N-2 IOR5A  (GW1NZ-1:IOR6A, GW1NS-4:IOT11B)
++    160: ['MCS_N', 'D5'], # GW1N-2 IOR6A  (GW1NZ-1:IOR6C, GW1NS-4:IOT10B)
+ }
+ def dat_fill_io_cfgs(db, dat, device, pindesc):
+     cfg_dict = dat.compat_dict['Cfg']
+@@ -941,7 +950,17 @@ def dat_fill_io_cfgs(db, dat, device, pindesc):
+                             #print(package_cfg, _io_cfg[cfg_code])
+                             db.io_cfg[io_name] = _io_cfg[cfg_code]
+                         elif cfg_code:
+-                            raise Exception(f"unknown pin configuration {cfg_code} at {io_name}")
++                            if device == 'GW1N-2':
++                                # GW1N-2: the identifiable special-function codes are mapped
++                                # in _io_cfg above (cross-device vendor cross-reference).
++                                # A residual 5 codes (43/44/45/46 @ IOR3A/B,IOR4A/B and
++                                # 141 @ IOB12A) carry no package label on any device with
++                                # vendor data here, so they stay non-fatal placeholders.
++                                # All 5 are unbonded on QFN48XF (no scope-decode impact).
++                                print(f"WARNING: unknown pin configuration {cfg_code} at {io_name} (GW1N-2 WIP)")
++                                db.io_cfg[io_name] = [f'UNKNOWN_CFG_{cfg_code}']
++                            else:
++                                raise Exception(f"unknown pin configuration {cfg_code} at {io_name}")
+                     #print(io_name, db.io_cfg[io_name])
+     return
+ 
+@@ -3299,6 +3318,10 @@ _osc_ports = {('OSCZ', 'GW1NZ-1'): ({}, {'OSCOUT' : (0, 5, 'OF3'), 'OSCEN': (0,
+               ('OSC',  'GW2A-18'):  ({'OSCOUT': 'Q4'}, {}),
+               ('OSC',  'GW2A-18C'):  ({'OSCOUT': 'Q4'}, {}),
+               ('OSCA', 'GW5A-25A'):  ({}, {'OSCOUT': (19, 91, 'MPLL3CLKIN2'), 'OSCEN': (19, 90, 'SEL4')}),
++              # GW1N-2 bring-up: the GW1N-2/GW1N-1P5 die exposes an 'OSCO' oscillator.
++              # Its port->wire aliases are not yet fuzzed; empty stub lets the grid/IO
++              # build proceed (the OSC is a hard block, mapped later). TODO: map OSCO.
++              ('OSCO', 'GW1N-2'):  ({}, {}),
+               }
+ 
+ # from logic to global clocks. An interesting piece of dat['CmuxIns'], it was
+@@ -4070,7 +4093,7 @@ def add_attr_val(dev, logic_table, attrs, attr, val):
+         attrs.add(attrval)
+ 
+ def get_pins(device):
+-    if device not in {"GW1N-1", "GW1NZ-1", "GW1N-4", "GW1N-9", "GW1NR-9", "GW1N-9C", "GW1NR-9C", "GW1NSR-4C", "GW2A-18", "GW2A-18C", "GW2AR-18C", "GW5A-25A", "GW5AST-138C"}:
++    if device not in {"GW1N-1", "GW1NZ-1", "GW1N-4", "GW1N-9", "GW1NR-9", "GW1N-9C", "GW1NR-9C", "GW1NSR-4C", "GW1N-1P5C", "GW2A-18", "GW2A-18C", "GW2AR-18C", "GW5A-25A", "GW5AST-138C"}:
+         raise Exception(f"unsupported device {device}")
+     pkgs = pindef.all_packages(device)
+     res = {}
+@@ -4172,10 +4195,19 @@ def json_pinout(device):
+         return (res, {
+             "GW5AST-138C": pins,
+         }, res_bank_pins)
++    elif device == "GW1N-2":
++        # GW1N-2 uses the GW1N-1P5C vendor data (same die). Key the pinout under the
++        # vendor name (downstream dat_fill_io_cfgs/pindef expect params['device']),
++        # and also under GW1N-2 for nextpnr compatibility.
++        pkgs, pins, bank_pins = get_pins("GW1N-1P5C")
++        return (pkgs, {
++            "GW1N-1P5C": pins,
++            "GW1N-2": pins,
++        }, bank_pins)
+     else:
+         raise Exception("unsupported device")
+ 
+-_adc_inputs = [(0, 'CLK'), (2, 'VSENCTL0'), (3, 'VSENCTL1'), (4, 'VSENCTL2'), (5, 'ADCMODE'),
++_adc_inputs =[(0, 'CLK'), (2, 'VSENCTL0'), (3, 'VSENCTL1'), (4, 'VSENCTL2'), (5, 'ADCMODE'),
+                (6, 'DRSTN'), (7, 'ADCREQI'), (8, 'MDRP_CLK'), (10, 'MDRP_WDATA0'), (11, 'MDRP_WDATA1'),
+                (12, 'MDRP_WDATA2'), (13, 'MDRP_WDATA3'), (14, 'MDRP_WDATA4'), (15, 'MDRP_WDATA5'),
+                (16, 'MDRP_WDATA6'), (17, 'MDRP_WDATA7'), (18, 'MDRP_A_INC'), (20, 'MDRP_OPCODE0'),
+diff --git a/apycula/chipdb_builder.py b/apycula/chipdb_builder.py
+index b429c26..3eb03d2 100644
+--- a/apycula/chipdb_builder.py
++++ b/apycula/chipdb_builder.py
+@@ -16,6 +16,15 @@ from apycula import tracing
+ from apycula import gowin_unpack
+ 
+ DEVICE_PARAMS = {
++    "GW1N-2": {
++        # GW1N-2 support (FNIRSI 2C53T scope die, IDCODE 0x0120681B). The Education
++        # edition ships no GW1N-2 vendor folder, but GW1N-1P5C is the *same die*
++        # (shared .fse family per doc/device_grouping.md). Verified: synthesizing for
++        # this partnumber emits device-ID 06 00 00 00 01 20 68 1b == 0x0120681B.
++        "package": "QFN48XF",
++        "device": "GW1N-1P5C",
++        "partnumber": "GW1N-UV1P5QN48XFC7/I6",
++    },
+     "GW1NS-4": {
+         "package": "QFN48P",
+         "device": "GW1NSR-4C",
+@@ -220,6 +229,7 @@ def gen_ftr():
+ _chip_id = {
+         'GW1N-1'      : b'\x06\x00\x00\x00\x09\x00\x28\x1b',
+         'GW1NZ-1'     : b'\x06\x00\x00\x00\x01\x00\x68\x1b',
++        'GW1N-2'      : b'\x06\x00\x00\x00\x01\x20\x68\x1b',
+         'GW1NS-2'     : b'\x06\x00\x00\x00\x03\x00\x08\x1b',
+         'GW1N-4'      : b'\x06\x00\x00\x00\x01\x00\x38\x1b',
+         'GW1NS-4'     : b'\x06\x00\x00\x00\x01\x00\x98\x1b',
+@@ -448,6 +458,12 @@ def main():
+         db[108, 165].bels.setdefault('GSR', chipdb.Bel()).portmap['GSRI'] = 'D7'
+     elif device in {'GW1N-1', 'GW1N-4', 'GW1NS-4', 'GW1N-9', 'GW1N-9C', 'GW1NS-2', 'GW1NZ-1'}:
+         db[0, 0].bels.setdefault('GSR', chipdb.Bel()).portmap['GSRI'] = 'C4'
++    elif device in {'GW1N-2'}:
++        # GW1N-2 / GW1N-1P5: the GSR routes to wire C4 at [0, 1] (R1C2), not the
++        # [0, 0] corner. Verified by diff-fuzzing a GSR primitive through Gowin for
++        # GW1N-UV1P5: the GSRI route is invariant at tile [0, 1] across reset-pin
++        # placement, terminating on C4 (pip-fuse match).
++        db[0, 1].bels.setdefault('GSR', chipdb.Bel()).portmap['GSRI'] = 'C4'
+     else:
+         raise Exception(f"No GSR for {device}")
+ 
+diff --git a/apycula/dat_parser.py b/apycula/dat_parser.py
+index a38de7f..a0ac707 100644
+--- a/apycula/dat_parser.py
++++ b/apycula/dat_parser.py
+@@ -35,8 +35,13 @@ class Datfile:
+ 
+         if partType == 0:       # 1/2 Series
+             self.compat_dict.update(self.read_something())
+-        elif partType == 1:
+-            raise Exception(f"PartType {partType} is not supported")
++        elif partType == 1:     # GW1N-2 / GW1N-1P5 family (FNIRSI 2C53T die)
++            # Same base .dat layout as partType 0 (all sections are at fixed absolute
++            # offsets below 0x7b4a8, guarded by asserts that would fire on misalign).
++            # partType 1 only *appends* a ~33 KB extended table at 0x7b4a8 (0x7b4a4
++            # for these files is 538638 B vs 505000 B for partType 0) which we do not
++            # parse yet — base grid/IO/logic parse identically. See docs/02.
++            self.compat_dict.update(self.read_something())
+         elif partType == 2:  # 5 Series
+             self.gw5aStuff = self.read_5Astuff()
+             self.compat_dict.update(self.read_something())
+diff --git a/apycula/gowin_unpack.py b/apycula/gowin_unpack.py
+index e1bdfc0..dc727f3 100644
+--- a/apycula/gowin_unpack.py
++++ b/apycula/gowin_unpack.py
+@@ -14,6 +14,7 @@ from apycula.bslib import read_bitstream, display
+ _device = ""
+ _pinout = ""
+ _packages = {
++        'GW1N-2' : 'QFN48XF',
+         'GW1N-1' : 'LQFP144', 'GW1NZ-1' : 'QFN48', 'GW1N-4' : 'PBGA256', 'GW1N-9C' : 'UBGA332',
+         'GW1N-9' : 'PBGA256', 'GW1NS-4' : 'QFN48P', 'GW1NS-2' : 'LQFP144', 'GW2A-18': 'PBGA256',
+         'GW2A-18C' : 'PBGA256S', 'GW5A-25A' : 'MBGA121N', 'GW5AST-138C' : 'PBGA484A'

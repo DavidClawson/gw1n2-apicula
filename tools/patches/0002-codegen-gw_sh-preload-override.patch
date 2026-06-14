@@ -1,0 +1,18 @@
+diff --git a/apycula/codegen.py b/apycula/codegen.py
+index 6c41a9d..94ab0eb 100644
+--- a/apycula/codegen.py
++++ b/apycula/codegen.py
+@@ -267,7 +267,12 @@ run pnr
+             with open(tmpdir+"/run.tcl", "w") as f:
+                 self.write(f, cst=cst, netlist=netlist)
+ 
+-            subprocess.run(["/usr/bin/env", "LD_PRELOAD=" + self.gowinhome + "/Programmer/bin/libfontconfig.so.1", self.gowinhome + "/IDE/bin/gw_sh", tmpdir+"/run.tcl"], cwd = tmpdir)
++            # GW1N-2 project: on Ubuntu 24.04 the bundled 2019 libfontconfig breaks gw_sh's
++            # Qt5 (undefined FcConfigGetSysRoot); preloading the *system* libfreetype fixes it.
++            # Honor $GOWIN_LD_PRELOAD as an override; fall back to upstream's bundled default.
++            # (QT_QPA_PLATFORM=offscreen for headless is inherited from the environment.)
++            gw_preload = os.environ.get("GOWIN_LD_PRELOAD", self.gowinhome + "/Programmer/bin/libfontconfig.so.1")
++            subprocess.run(["/usr/bin/env", "LD_PRELOAD=" + gw_preload, self.gowinhome + "/IDE/bin/gw_sh", tmpdir+"/run.tcl"], cwd = tmpdir)
+             #print(tmpdir); input()
+             try:
+                 constrs = self.cst if isinstance(self.cst, Constraints) else Constraints()

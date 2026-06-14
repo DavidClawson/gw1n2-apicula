@@ -1,0 +1,38 @@
+diff --git a/himbaechel/uarch/gowin/CMakeLists.txt b/himbaechel/uarch/gowin/CMakeLists.txt
+index b3797823..51319b3f 100644
+--- a/himbaechel/uarch/gowin/CMakeLists.txt
++++ b/himbaechel/uarch/gowin/CMakeLists.txt
+@@ -25,7 +25,7 @@ add_nextpnr_himbaechel_microarchitecture(${uarch}
+     CORE_SOURCES ${SOURCES}
+ )
+ 
+-set(ALL_HIMBAECHEL_GOWIN_DEVICES GW1N-1 GW1NZ-1 GW1N-4 GW1N-9 GW1N-9C GW1NS-4 GW2A-18 GW2A-18C GW5A-25A GW5AST-138C)
++set(ALL_HIMBAECHEL_GOWIN_DEVICES GW1N-1 GW1N-2 GW1NZ-1 GW1N-4 GW1N-9 GW1N-9C GW1NS-4 GW2A-18 GW2A-18C GW5A-25A GW5AST-138C)
+ set(HIMBAECHEL_GOWIN_DEVICES ${ALL_HIMBAECHEL_GOWIN_DEVICES} CACHE STRING
+     "Include support for these Gowin devices (available: ${ALL_HIMBAECHEL_GOWIN_DEVICES})")
+ if (HIMBAECHEL_GOWIN_DEVICES STREQUAL "all")
+diff --git a/himbaechel/uarch/gowin/gowin_arch_gen.py b/himbaechel/uarch/gowin/gowin_arch_gen.py
+index 2bda0e00..292a5bb7 100644
+--- a/himbaechel/uarch/gowin/gowin_arch_gen.py
++++ b/himbaechel/uarch/gowin/gowin_arch_gen.py
+@@ -1021,7 +1021,7 @@ def create_io_tiletype(chip: Chip, db: chipdb, x: int, y: int, ttyp: int, tdesc:
+     tt = chip.create_tile_type(tiletype)
+     tt.extra_data = TileExtraData(chip.strs.id(typename))
+ 
+-    simple_io = y in db.simplio_rows and chip.name in {'GW1N-1', 'GW1NZ-1', 'GW1N-4'}
++    simple_io = y in db.simplio_rows and chip.name in {'GW1N-1', 'GW1NZ-1', 'GW1N-2', 'GW1N-4'}
+     if simple_io:
+         rng = 10
+     else:
+@@ -1557,6 +1557,11 @@ def create_pll_tiletype(chip: Chip, db: chipdb, x: int, y: int, ttyp: int, tdesc
+     else:
+         pll_name = 'RPLLA'
+         bel_type = 'rPLL'
++    if pll_name not in db[y, x].bels:
++        # GW1N-2 (WIP): PLL not yet in chipdb (partType-1 extended table / M4).
++        # Emit the tile without a PLL bel so logic/routing/IO still round-trip.
++        tdesc.tiletype = tiletype
++        return tt
+     portmap = db[y, x].bels[pll_name].portmap
+     pll = tt.create_bel("PLL", bel_type, z = PLL_Z)
+     pll.flags = BEL_FLAG_GLOBAL

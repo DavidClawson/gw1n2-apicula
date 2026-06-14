@@ -1,0 +1,4 @@
+IO_LOC "clk" 9;
+IO_LOC "a" 10;
+IO_LOC "b" 11;
+IO_LOC "q" 14;
